@@ -35,30 +35,34 @@ plain='\033[0m'
 # Print Welcome Message
 clear
 echo "----------------------------------------------------"
-echo "  Install MTProto For Telegram with Promoted Channel"
-echo "  Author: ZarinNegah"
-echo "  URL: http://Fastsetup.MTProtoServer.ir/"
-echo "  Telegram: https://t.me/mtp_2018"
+echo "  WhatsApp Server Config                            "
+echo "  Author: Sardarn84                                 "
 echo "----------------------------------------------------"
 echo ""
 
+# Repos
+if [ ${OS} == CentOS ];then
+  cp -rfp /etc/yum.repos.d /etc/yum.repos.d-bac-1
+  sed -i "s|^mirrorlist=|#mirrorlist=|g" /etc/yum.repos.d/*
+  sed -i "s|^#baseurl=http://mirror.centos.org|baseurl=https://y.docker-registry.ir|g" /etc/yum.repos.d/*
+fi
 
-if [ -f "/etc/secret" ]; then 
-	IP=$(curl -4 -s ip.sb)
-	SECRET=$(cat /etc/secret)
-	PORT=$(cat /etc/proxy-port)
-	TAG=$(cat /etc/proxy-tag)
-	echo "MTProxy Installed！"
-        echo "Server IP： ${IP}"
-        echo "Port：      ${PORT}"
-        echo "Secret：    ${SECRET}"
-        echo "TAG：       ${TAG}"
-        echo ""
-        echo -e "TG Proxy link：${green}https://t.me/proxy?server=${IP}&port=${uport}&secret=${SECRET}${plain}"
-        echo ""
-        echo -e "TG Proxy link：${green}tg://proxy?server=${IP}&port=${uport}&secret=${SECRET}${plain}"
-	echo ""
-	exit 0
+# Update And Install Package
+if [ ${OS} == CentOS ];then
+  sudo yum -y update
+  sudo yum -y upgrade
+  sudo yum install git -y
+  sudo yum install wget -y
+fi
+
+# Node Install
+if [ ${OS} == CentOS ];then
+  curl -sL https://rpm.nodesource.com/setup_12.x | sudo bash -
+  sudo yum clean all && sudo yum makecache fast
+  sudo yum install -y gcc-c++ make
+  sudo yum install -y nodejs
+  sudo yum install -y unzip
+  npm install -g nodemon
 fi
 
 # Firewalld
@@ -66,115 +70,36 @@ if [ ${OS} == CentOS ];then
   yum install firewalld -y
   systemctl enable firewalld
   systemctl start firewalld
+  sudo firewall-cmd --zone=public --add-port=443/tcp --permanent
+  sudo firewall-cmd --reload
   systemctl status firewalld
 fi
 
-# Enter the Proxy Port
-read -p "Inout the Port for running MTProxy [Default: 2082]： " uport
-if [[ -z "${uport}" ]];then
-	uport="2082"
-fi
-
+# Install Source and Run
 if [ ${OS} == CentOS ];then
-  yum update -y
-  yum install wget gcc gcc-c++ flex bison make bind bind-libs bind-utils epel-release iptables-services openssl openssl-devel firewalld perl quota libaio libcom_err-devel libcurl-devel tar diffutils nano dbus.x86_64 db4-devel cyrus-sasl-devel perl-ExtUtils-Embed.x86_64 cpan vim-common screen libtool perl-core zlib-devel htop git curl sudo -y
-  yum groupinstall "Development Tools" -y
+  wget http://demo-php.ir/whatsapp/WhatsApp-Nodejs.zip
+  unzip WhatsApp-Nodejs.zip
+  cd WhatsApp-Nodejs
+
+  npm i request
+  npm i qrcode-terminal
+  npm install forever -g
+  
+  wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+  sudo yum localinstall google-chrome-stable_current_x86_64.rpm
+
+  export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+  npm i
+
+  cd node_modules/whatsapp-web.js/src/util
+  rm Injected.js
+  wget http://demo-php.ir/whatsapp/Injected.js
+  cd ../../../../
+  
+  forever start app.js
 fi
-
-# Get Native IP Address
-IP=$(curl -4 -s ip.sb)
-
-# Switch to Temporary Directory
-mkdir /tmp/MTProxy
-cd /tmp/MTProxy
-
-# Download MTProxy project source code
-git clone https://github.com/TelegramMessenger/MTProxy
-
-# Go to project compile and install to /usr/local/bin/
-pushd MTProxy
-make -j ${THREAD}
-cp objs/bin/mtproto-proxy /usr/local/bin/
-
-# Generate a Key
-curl -s https://core.telegram.org/getProxySecret -o /etc/proxy-secret
-curl -s https://core.telegram.org/getProxyConfig -o /etc/proxy-multi.conf
-echo "${uport}" > /etc/proxy-port
-head -c 16 /dev/urandom | xxd -ps > /etc/secret
-SECRET=$(cat /etc/secret)
-echo "Server IP： ${IP}"
-echo "Port：      ${uport}"
-echo "Secret：    ${SECRET}"
-echo "Register your Proxy with Bot @MTProxybot on Telegram"
-echo "Set received tag with @MTProxybot on Telegram and Past Command"
-read -p "Set Proxy Tag： " proxytag
-if [[ ${proxytag} = "" ]]; then
-   proxytag=""
-fi
-echo "${proxytag}" > /etc/proxy-tag
-TAG=$(cat /etc/proxy-tag)
-
-# Set Up the Systemd Service Management Configuration
-cat << EOF > /etc/systemd/system/MTProxy.service
-[Unit]
-Description=MTProxy
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/usr/local/bin/
-ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 64335 -H ${uport} -S ${SECRET} -P ${TAG} --aes-pwd /etc/proxy-secret /etc/proxy-multi.conf
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-
-# Setting Up a Firewall
-if [ ! -f "/etc/iptables.up.rules" ]; then 
-    iptables-save > /etc/iptables.up.rules
-fi
-
-if [[ ${OS} == CentOS ]];then
-	if [[ $CentOS_RHEL_version == 7 ]];then
-		
-        if [ $? -eq 0 ]; then
-	        firewall-cmd --permanent --add-port=${uport}/tcp
-		firewall-cmd --permanent --add-port=${uport}/udp
-	        firewall-cmd --reload
-	else
-		iptables-restore < /etc/iptables.up.rules
-		iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport $uport -j ACCEPT
-    		iptables -I INPUT -m state --state NEW -m udp -p udp --dport $uport -j ACCEPT
-		iptables-save > /etc/iptables.up.rules
-		fi
-	else
-		iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport $uport -j ACCEPT
-    	        iptables -I INPUT -m state --state NEW -m udp -p udp --dport $uport -j ACCEPT
-		/etc/init.d/iptables save
-		/etc/init.d/iptables restart
-	fi
-fi
-
-
-# Set Boot From Start and Start MTProxy
-systemctl daemon-reload
-systemctl enable MTProxy.service
-systemctl restart MTProxy
-
-# Clean Installation Residue
-rm -rf /tmp/MTProxy >> /dev/null 
 
 # Display Service Information
 clear
-echo "MTProxy Successful Installation！"
-echo "Server IP： ${IP}"
-echo "Port：      ${uport}"
-echo "Secret：    ${SECRET}"
-echo "TAG：       ${TAG}"
-echo ""
-echo -e "TG Proxy link：${green}https://t.me/proxy?server=${IP}&port=${uport}&secret=${SECRET}${plain}"
-echo ""
-echo -e "TG Proxy link：${green}tg://proxy?server=${IP}&port=${uport}&secret=${SECRET}${plain}"
+echo "WhatsApp Server Installation！"
 echo ""
